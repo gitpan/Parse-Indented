@@ -2,4 +2,7 @@ Revision history for Parse-Indented
 
 0.01    2010-02-14
         This finally works the way I want it, so here goes.
+        
+0.02    2010-02-28
+        Return value should be list of objects added, if a root object is supplied at the outset.
 

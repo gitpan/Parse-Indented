@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Parse-Indented
-version:            0.01
+version:            0.02
 abstract:           Given a Pythonesque set of indented lines, parses them into a convenient hierarchical structure
 author:
     - Michael Roberts <michael@vivtek.com>
@@ -10,7 +10,7 @@ configure_requires:
     ExtUtils::MakeMaker:  0
 requires:
     Test::More:   0
-    XML::xmlapi:  0
+    XML::xmlapi:  0.06
 no_index:
     directory:
         - t

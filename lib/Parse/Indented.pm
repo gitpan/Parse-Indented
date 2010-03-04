@@ -10,11 +10,11 @@ Parse::Indented - Given a Pythonesque set of indented lines, parses them into a 
 
 =head1 VERSION
 
-Version 0.01
+Version 0.02
 
 =cut
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 
 =head1 SYNOPSIS
@@ -49,17 +49,21 @@ sub new {
    bless { line_parser => $line_parser, baseclass => $baseclass}, $class;
 }
 
-=head2 parse ($text, $line_parser)
+=head2 parse ($text, $line_parser, $root)
 
 Call this with some indented text to parse.  If you set up a parser in advance, you don't need to pass a line parser; if you don't
 want to mess with that, though, you can call this as a class method and give it the line parser on the spot.
 
-C<Parse::Indented> ignores blank lines and any comments from # to the end of the line.  It trims leading and trailing space before asking
+If a "root" node is given, the parsed objects will be added to that root, and the return value is a list of the objects added (in list context);
+if no root node is supplied, one will be created (with a "root" tag) and the return value is that object.
+
+About the input: C<Parse::Indented> ignores blank lines and any comments from # to the end of the line.  It trims leading and trailing space before asking
 the line parser to parse the line for it.  The line parser is passed a string and is expected to return an L<XML::xmlapi> (or $baseclass) structure; if
 it doesn't (that is, if it returns the same string you gave it, or a different string) C<Parse::Indented> will turn it into a <line> tag
 with the text of the line in a "text" attribute, e.g. <line text="this is the line you passed"/>.
 
-Children of each line are appended prettily to the parsed tag.  If the parsed tag already has some structure, that means you will need to be
+Children of each line are appended prettily to the parsed tag, meaning that if the data is dumped in XML format ($object->string()), each tag will be
+on a separate line instead of all being run together.  If the parsed tag already has some structure, this behavior means you will need to be
 a little careful with your semantics to avoid confusion.  Wise choices are left to the user; C<Parse::Indented> will gladly shoot you in the
 foot if you tell it to.
 
@@ -77,9 +81,10 @@ For example:
    }
    
 This will create a line structure for "code something", with a body element under it containing "indented code\nhere\n".  I<Note>, however, that the
-initial indentations for the indented code will be removed, as it's assumed you want the code to be unindented.
+initial indentations for the indented code will be removed, as it's assumed you want the code to be unindented.  Indentation within the block is preserved,
+so if you have one line indented six spaces and one under it indented nine, you'll end up with the first line not indented and the second line indented by three.
 
-Similarly, if the line parser reports that the structure for "code something" wants sublines, this would be equivalent:
+If the line parser reports that the structure for "code something" wants sublines, this would be equivalent:
 
    code something
       indented code
@@ -89,7 +94,7 @@ Similarly, if the line parser reports that the structure for "code something" wa
    
 See?  That would return line structures for "code something" and "more stuff later", with the same body for "code something" as in the previous example.
 This is here for two reasons: first, my goal in this is to be able to type as few keystrokes as possible to express myself.  Second, this allows code
-to look like the rest of the structure.  Esthetically, that's important to me.
+to look like the rest of the structure; it's an esthetic decision.
 
 =cut
 
@@ -107,7 +112,15 @@ sub parse {
       }
    }
 
-   my $returns = $root || $self->{baseclass}->create('root');
+   my @toplevel = ();
+   my $createdroot = 0;
+   my $returns;
+   if ($root) {
+      $returns = $root;
+   } else {
+      $returns = $self->{baseclass}->create('root');
+      $createdroot = 1;
+   }
    my $cursor = { o => {tag => $returns, parent=>$returns}, n => -1 };
    my $indent = -1;
    my @levels = ();
@@ -160,7 +173,7 @@ sub parse {
             }
 		 }
          if ($still_going) {
-   	        $bracket_text .= substr($line, $bracket_indent) . "\n";
+   	        $bracket_text .= ($line ? substr($line, $bracket_indent) : '') . "\n";
 	        next;
          }
 	  }
@@ -203,6 +216,7 @@ sub parse {
 
          my $new_line = { tag => $new_tag, parent => $$cursor{o} };
          $$new_line{parent}{tag}->append_pretty ($new_tag);
+         push @toplevel, $new_tag if $root and $$new_line{parent}{tag} eq $root;
          $cursor = { o => $new_line, n => $this_indent };
       } else {
          if ($this_indent < $indent) {
@@ -214,12 +228,23 @@ sub parse {
          # Equal indentation concats to current return list
          my $new_line = { tag => $new_tag, parent => $$cursor{o}{parent} };
          $$new_line{parent}{tag}->append_pretty ($new_tag);
+         push @toplevel, $new_tag if $root and $$new_line{parent}{tag} eq $root;
          $cursor = { o => $new_line, n => $this_indent };
       }
       $indent = $this_indent;
    }
    
-   return $returns;
+   if ($bracket) { # Then we have a wantsbody body at the end of the input.  Add it.
+      my $bracket_body = $self->{baseclass}->create ("body");
+	  $bracket_body->append ($self->{baseclass}->createtext ($bracket_text));
+	  $bracket_parent->append_pretty($bracket_body);
+   }
+   
+   if (wantarray and not $createdroot) {
+      return @toplevel;
+   } else {
+      return $returns;
+   }
 }
 
 =head1 AUTHOR
